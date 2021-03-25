@@ -53,7 +53,7 @@ func NewClient(
 ) (*Client, error) {
 	// Create querier API client
 	querierAPIClient, err := promapi.NewClient(promapi.Config{
-		Address:      "http://" + querierAddress + "/api/prom",
+		Address:      "http://" + querierAddress + "/prometheus",
 		RoundTripper: &addOrgIDRoundTripper{orgID: orgID, next: http.DefaultTransport},
 	})
 	if err != nil {
@@ -94,7 +94,7 @@ func (c *Client) Push(timeseries []prompb.TimeSeries) (*http.Response, error) {
 
 	// Create HTTP request
 	compressed := snappy.Encode(nil, data)
-	req, err := http.NewRequest("POST", fmt.Sprintf("http://%s/api/prom/push", c.distributorAddress), bytes.NewReader(compressed))
+	req, err := http.NewRequest("POST", fmt.Sprintf("http://%s/api/v1/push", c.distributorAddress), bytes.NewReader(compressed))
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +136,7 @@ func (c *Client) QueryRange(query string, start, end time.Time, step time.Durati
 // QueryRangeRaw runs a ranged query directly against the querier API.
 func (c *Client) QueryRangeRaw(query string, start, end time.Time, step time.Duration) (*http.Response, []byte, error) {
 	addr := fmt.Sprintf(
-		"http://%s/api/prom/api/v1/query_range?query=%s&start=%s&end=%s&step=%s",
+		"http://%s/prometheus/api/v1/query_range?query=%s&start=%s&end=%s&step=%s",
 		c.querierAddress,
 		url.QueryEscape(query),
 		FormatTime(start),
@@ -149,7 +149,7 @@ func (c *Client) QueryRangeRaw(query string, start, end time.Time, step time.Dur
 
 // QueryRaw runs a query directly against the querier API.
 func (c *Client) QueryRaw(query string) (*http.Response, []byte, error) {
-	addr := fmt.Sprintf("http://%s/api/prom/api/v1/query?query=%s", c.querierAddress, url.QueryEscape(query))
+	addr := fmt.Sprintf("http://%s/prometheus/api/v1/query?query=%s", c.querierAddress, url.QueryEscape(query))
 
 	return c.query(addr)
 }
@@ -218,7 +218,7 @@ type ServerStatus struct {
 // GetPrometheusRules fetches the rules from the Prometheus endpoint /api/v1/rules.
 func (c *Client) GetPrometheusRules() ([]*ruler.RuleGroup, error) {
 	// Create HTTP request
-	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/api/prom/api/v1/rules", c.rulerAddress), nil)
+	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/prometheus/api/v1/rules", c.rulerAddress), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -260,7 +260,7 @@ func (c *Client) GetPrometheusRules() ([]*ruler.RuleGroup, error) {
 // GetRuleGroups gets the configured rule groups from the ruler.
 func (c *Client) GetRuleGroups() (map[string][]rulefmt.RuleGroup, error) {
 	// Create HTTP request
-	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/api/prom/rules", c.rulerAddress), nil)
+	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/api/v1/rules", c.rulerAddress), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -300,7 +300,7 @@ func (c *Client) SetRuleGroup(rulegroup rulefmt.RuleGroup, namespace string) err
 	}
 
 	// Create HTTP request
-	req, err := http.NewRequest("POST", fmt.Sprintf("http://%s/api/prom/rules/%s", c.rulerAddress, url.PathEscape(namespace)), bytes.NewReader(data))
+	req, err := http.NewRequest("POST", fmt.Sprintf("http://%s/api/v1/rules/%s", c.rulerAddress, url.PathEscape(namespace)), bytes.NewReader(data))
 	if err != nil {
 		return err
 	}
@@ -324,7 +324,7 @@ func (c *Client) SetRuleGroup(rulegroup rulefmt.RuleGroup, namespace string) err
 // DeleteRuleGroup deletes a rule group.
 func (c *Client) DeleteRuleGroup(namespace string, groupName string) error {
 	// Create HTTP request
-	req, err := http.NewRequest("DELETE", fmt.Sprintf("http://%s/api/prom/rules/%s/%s", c.rulerAddress, url.PathEscape(namespace), url.PathEscape(groupName)), nil)
+	req, err := http.NewRequest("DELETE", fmt.Sprintf("http://%s/api/v1/rules/%s/%s", c.rulerAddress, url.PathEscape(namespace), url.PathEscape(groupName)), nil)
 	if err != nil {
 		return err
 	}
@@ -348,7 +348,7 @@ func (c *Client) DeleteRuleGroup(namespace string, groupName string) error {
 // DeleteRuleNamespace deletes all the rule groups (and the namespace itself).
 func (c *Client) DeleteRuleNamespace(namespace string) error {
 	// Create HTTP request
-	req, err := http.NewRequest("DELETE", fmt.Sprintf("http://%s/api/prom/rules/%s", c.rulerAddress, url.PathEscape(namespace)), nil)
+	req, err := http.NewRequest("DELETE", fmt.Sprintf("http://%s/api/v1/rules/%s", c.rulerAddress, url.PathEscape(namespace)), nil)
 	if err != nil {
 		return err
 	}
@@ -375,7 +375,7 @@ type userConfig struct {
 
 // GetAlertmanagerConfig gets the status of an alertmanager instance
 func (c *Client) GetAlertmanagerConfig(ctx context.Context) (*alertConfig.Config, error) {
-	u := c.alertmanagerClient.URL("/api/prom/api/v1/status", nil)
+	u := c.alertmanagerClient.URL("/alertmanager/api/v1/status", nil)
 
 	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
 	if err != nil {
@@ -467,7 +467,7 @@ func (c *Client) DeleteAlertmanagerConfig(ctx context.Context) error {
 
 // SendAlertToAlermanager sends alerts to the Alertmanager API
 func (c *Client) SendAlertToAlermanager(ctx context.Context, alert *model.Alert) error {
-	u := c.alertmanagerClient.URL("/api/prom/api/v1/alerts", nil)
+	u := c.alertmanagerClient.URL("/alertmanager/api/v1/alerts", nil)
 
 	data, err := json.Marshal([]types.Alert{{Alert: *alert}})
 	if err != nil {
@@ -492,7 +492,7 @@ func (c *Client) SendAlertToAlermanager(ctx context.Context, alert *model.Alert)
 }
 
 func (c *Client) CreateSilence(ctx context.Context, silence types.Silence) error {
-	u := c.alertmanagerClient.URL("api/prom/api/v1/silences", nil)
+	u := c.alertmanagerClient.URL("/alertmanager/api/v1/silences", nil)
 
 	data, err := json.Marshal(silence)
 	if err != nil {
